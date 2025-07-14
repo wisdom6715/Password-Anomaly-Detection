@@ -1,28 +1,28 @@
 // Initialize dashboard
 document.addEventListener("DOMContentLoaded", () => {
-  checkAuth()
+  // checkAuth()
   refreshDashboard()
 
   // Auto-refresh every 30 seconds
   setInterval(refreshDashboard, 30000)
 })
 
-async function checkAuth() {
-  try {
-    const response = await fetch("/api/auth/verify")
-    const result = await response.json()
+// async function checkAuth() {
+//   try {
+//     const response = await fetch("/api/auth/verify")
+//     const result = await response.json()
 
-    if (!result.authenticated) {
-      window.location.href = "/login.html"
-      return
-    }
+//     if (!result.authenticated) {
+//       window.location.href = "/login.html"
+//       return
+//     }
 
-    document.getElementById("welcomeMessage").textContent = `Welcome, ${result.username}!`
-  } catch (error) {
-    console.error("Auth check failed:", error)
-    window.location.href = "/login.html"
-  }
-}
+//     document.getElementById("welcomeMessage").textContent = `Welcome, ${result.username}!`
+//   } catch (error) {
+//     console.error("Auth check failed:", error)
+//     window.location.href = "/login.html"
+//   }
+// }
 
 async function refreshDashboard() {
   try {
