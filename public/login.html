@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Security System</title>
+    <link rel="stylesheet" href="styles/auth.css">
+</head>
+<body>
+    <div class="container">
+        <div class="auth-form">
+            <div class="header">
+                <h1>🔐 Login</h1>
+                <p>Authentication & Anomaly Detection System</p>
+            </div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <button type="submit" id="loginBtn">
+                    <span id="btnText">Login</span>
+                    <span id="spinner" class="spinner hidden">⟳</span>
+                </button>
+            </form>
+            
+            <div id="message" class="message hidden"></div>
+            
+            <div class="auth-links">
+                <p>Don't have an account? <a href="/signup.html">Sign up here</a></p>
+            </div>
+            
+            <div class="logs-section">
+                <h3>Recent Login Attempts</h3>
+                <div id="loginLogs" class="logs-container">
+                    <p>Loading logs...</p>
+                </div>
+                <button onclick="refreshLogs()" class="refresh-btn">Refresh Logs</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/scripts/login.js"></script>
+</body>
+</html>

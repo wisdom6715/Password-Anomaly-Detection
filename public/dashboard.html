@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Security System</title>
+    <link rel="stylesheet" href="styles/dashboard.css">
+</head>
+<body>
+    <div class="dashboard">
+        <header class="dashboard-header">
+            <h1>🔐 Security Dashboard</h1>
+            <div class="user-info">
+                <span id="welcomeMessage">Welcome!</span>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+        </header>
+        
+        <main class="dashboard-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Login Attempts</h3>
+                    <div class="stat-number" id="totalAttempts">0</div>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Successful Logins</h3>
+                    <div class="stat-number" id="successfulLogins">0</div>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Failed Attempts</h3>
+                    <div class="stat-number" id="failedAttempts">0</div>
+                </div>
+                
+                <div class="stat-card">
+                    <h3>Security Alerts</h3>
+                    <div class="stat-number" id="securityAlerts">0</div>
+                </div>
+            </div>
+            
+            <div class="logs-section">
+                <h2>Recent Activity</h2>
+                <div id="activityLogs" class="activity-logs">
+                    <p>Loading activity...</p>
+                </div>
+                <button onclick="refreshDashboard()" class="refresh-btn">Refresh</button>
+            </div>
+        </main>
+    </div>
+    
+    <script src="/scripts/dashboard.js"></script>
+</body>
+</html>
