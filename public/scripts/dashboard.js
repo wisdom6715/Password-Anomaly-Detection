@@ -1,8 +1,6 @@
 // Initialize dashboard
 document.addEventListener("DOMContentLoaded", () => {
   refreshDashboard()
-
-  // Auto-refresh every 30 seconds
   setInterval(refreshDashboard, 30000)
 })
 const API_BASE_URL = "https://password-anomaly-detection-3.onrender.com"
@@ -38,9 +36,6 @@ async function refreshDashboard() {
 
     const stats = await response.json()
     updateStats(stats)
-
-    // Optionally, you can also fetch recent activity logs if needed
-    // await fetchRecentActivity(token)
 
   } catch (error) {
     console.error("Error refreshing dashboard:", error)

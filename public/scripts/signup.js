@@ -83,7 +83,7 @@ async function handleSignup(e) {
       // Redirect to login after 2 seconds
       setTimeout(() => {
         window.location.href = "/dashboard.html"
-      }, 2000)
+      }, 1000)
     } else {
       // Handle specific error messages from backend
       if (result.error) {
