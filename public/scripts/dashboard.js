@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Auto-refresh every 30 seconds
   setInterval(refreshDashboard, 30000)
 })
+const API_BASE_URL = "https://password-anomaly-detection-3.onrender.com"
 
 async function refreshDashboard() {
   try {
@@ -17,7 +18,7 @@ async function refreshDashboard() {
     }
 
     // Fetch dashboard statistics
-    const response = await fetch("/api/stats/dashboard", {
+    const response = await fetch(`${API_BASE_URL}/api/stats/dashboard`, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`,
