@@ -5,6 +5,9 @@ const btnText = document.getElementById("btnText")
 const spinner = document.getElementById("spinner")
 const messageDiv = document.getElementById("message")
 
+// Backend URL
+const API_BASE_URL = "http://password-anomaly-detection-3.onrender.com"
+
 // Initialize the page
 document.addEventListener("DOMContentLoaded", () => {
   // Add form submit event listener
@@ -27,6 +30,7 @@ async function handleSignup(e) {
   const username = document.getElementById("username").value.trim()
   const password = document.getElementById("password").value
   const confirmPassword = document.getElementById("confirmPassword").value
+  const phoneNumber = document.getElementById("phoneNumber").value.trim() // Added phoneNumber
 
   // Validation
   if (!fullName || !email || !username || !password || !confirmPassword || !phoneNumber) {
@@ -52,16 +56,17 @@ async function handleSignup(e) {
   setLoading(true)
 
   try {
-    const response = await fetch("/api/auth/signup", {
+    // Updated to match backend endpoint and field names
+    const response = await fetch(`${API_BASE_URL}/api/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        fullName,
-        email,
         username,
+        email,
         password,
+        phone_number: phoneNumber, // Backend expects phone_number
         timestamp: new Date().toISOString(),
         userAgent: navigator.userAgent,
       }),
@@ -69,8 +74,8 @@ async function handleSignup(e) {
 
     const result = await response.json()
 
-    if (result.success) {
-      showMessage("Account created successfully! Redirecting to login...", "success")
+    if (response.ok) {
+      showMessage(result.message || "Account created successfully! Redirecting to login...", "success")
 
       // Clear form
       signupForm.reset()
@@ -80,7 +85,12 @@ async function handleSignup(e) {
         window.location.href = "/login.html"
       }, 2000)
     } else {
-      showMessage(result.message || "Signup failed", "error")
+      // Handle specific error messages from backend
+      if (result.error) {
+        showMessage(result.error, "error")
+      } else {
+        showMessage("Signup failed", "error")
+      }
     }
   } catch (error) {
     console.error("Signup error:", error)

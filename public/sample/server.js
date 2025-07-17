@@ -5,10 +5,12 @@ const { createClient } = require('@supabase/supabase-js');
 const twilio = require('twilio');
 const useragent = require('useragent');
 const crypto = require('crypto');
+const cors = require('cors')
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
+app.use(cors())
 
 // Configuration
 const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || 'jwt-secret-string';
