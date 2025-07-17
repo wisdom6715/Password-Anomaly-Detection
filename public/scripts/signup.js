@@ -29,7 +29,7 @@ async function handleSignup(e) {
   const confirmPassword = document.getElementById("confirmPassword").value
 
   // Validation
-  if (!fullName || !email || !username || !password || !confirmPassword) {
+  if (!fullName || !email || !username || !password || !confirmPassword || !phoneNumber) {
     showMessage("Please fill in all fields", "error")
     return
   }
