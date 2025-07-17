@@ -6,6 +6,9 @@ const spinner = document.getElementById("spinner")
 const messageDiv = document.getElementById("message")
 const logsContainer = document.getElementById("loginLogs")
 
+// Backend URL
+const API_BASE_URL = "https://password-anomaly-detection-3.onrender.com"
+
 // Initialize the page
 document.addEventListener("DOMContentLoaded", () => {
   refreshLogs()
@@ -29,7 +32,7 @@ async function handleLogin(e) {
   setLoading(true)
 
   try {
-    const response = await fetch("/api/auth/login", {
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -44,20 +47,29 @@ async function handleLogin(e) {
 
     const result = await response.json()
 
-    if (result.success) {
-      showMessage(`Welcome ${username}! Login successful.`, "success")
+    if (response.ok) {
+      // Store access token if needed
+      if (result.access_token) {
+        localStorage.setItem('access_token', result.access_token)
+      }
+
+      let message = result.message || `Welcome ${username}! Login successful.`
+      
+      // Check for security alerts
+      if (result.security_alert) {
+        message += ` ${result.security_alert}`
+        showMessage(message, "warning")
+      } else {
+        showMessage(message, "success")
+      }
 
       // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         window.location.href = "/dashboard.html"
       }, 2000)
     } else {
-      showMessage(result.message || "Login failed", "error")
-    }
-
-    // Check for anomalies
-    if (result.anomaly) {
-      showMessage(`⚠️ SECURITY ALERT: ${result.anomaly.message}`, "warning")
+      // Handle error response
+      showMessage(result.error || "Login failed", "error")
     }
 
     // Refresh logs to show new attempt
@@ -95,7 +107,12 @@ function showMessage(text, type) {
 
 async function refreshLogs() {
   try {
-    const response = await fetch("/api/auth/logs")
+    const response = await fetch(`${API_BASE_URL}/api/logs`)
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
     const logs = await response.json()
 
     if (logs.length === 0) {

@@ -6,7 +6,7 @@ const spinner = document.getElementById("spinner")
 const messageDiv = document.getElementById("message")
 
 // Backend URL
-const API_BASE_URL = "http://password-anomaly-detection-3.onrender.com"
+const API_BASE_URL = "https://password-anomaly-detection-3.onrender.com"
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", () => {
@@ -82,7 +82,7 @@ async function handleSignup(e) {
 
       // Redirect to login after 2 seconds
       setTimeout(() => {
-        window.location.href = "/login.html"
+        window.location.href = "/dashboard.html"
       }, 2000)
     } else {
       // Handle specific error messages from backend
