@@ -1,72 +1,91 @@
 // Initialize dashboard
 document.addEventListener("DOMContentLoaded", () => {
-  // checkAuth()
   refreshDashboard()
 
   // Auto-refresh every 30 seconds
   setInterval(refreshDashboard, 30000)
 })
 
-// async function checkAuth() {
-//   try {
-//     const response = await fetch("/api/auth/verify")
-//     const result = await response.json()
-
-//     if (!result.authenticated) {
-//       window.location.href = "/login.html"
-//       return
-//     }
-
-//     document.getElementById("welcomeMessage").textContent = `Welcome, ${result.username}!`
-//   } catch (error) {
-//     console.error("Auth check failed:", error)
-//     window.location.href = "/login.html"
-//   }
-// }
-
 async function refreshDashboard() {
   try {
-    // Fetch logs and calculate stats
-    const response = await fetch("/api/auth/logs")
-    const logs = await response.json()
+    // Get authentication token
+    const token = localStorage.getItem('access_token')
+    
+    if (!token) {
+      window.location.href = "/login.html"
+      return
+    }
 
-    // Calculate statistics
-    const stats = calculateStats(logs)
+    // Fetch dashboard statistics
+    const response = await fetch("/api/stats/dashboard", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    })
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        // Token expired or invalid, redirect to login
+        localStorage.removeItem('access_token')
+        window.location.href = "/login.html"
+        return
+      }
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const stats = await response.json()
     updateStats(stats)
 
-    // Update activity logs
-    updateActivityLogs(logs)
+    // Optionally, you can also fetch recent activity logs if needed
+    // await fetchRecentActivity(token)
+
   } catch (error) {
     console.error("Error refreshing dashboard:", error)
-  }
-}
-
-function calculateStats(logs) {
-  const totalAttempts = logs.length
-  const successfulLogins = logs.filter((log) => log.success && log.type !== "signup").length
-  const failedAttempts = logs.filter((log) => !log.success && log.type !== "signup").length
-  const securityAlerts = logs.filter((log) => log.anomaly).length
-
-  return {
-    totalAttempts,
-    successfulLogins,
-    failedAttempts,
-    securityAlerts,
+    showError("Failed to refresh dashboard data")
   }
 }
 
 function updateStats(stats) {
-  document.getElementById("totalAttempts").textContent = stats.totalAttempts
-  document.getElementById("successfulLogins").textContent = stats.successfulLogins
-  document.getElementById("failedAttempts").textContent = stats.failedAttempts
-  document.getElementById("securityAlerts").textContent = stats.securityAlerts
+  // Update the statistics display
+  document.getElementById("totalAttempts").textContent = stats.total_login_attempts || 0
+  document.getElementById("successfulLogins").textContent = stats.successful_logins || 0
+  document.getElementById("failedAttempts").textContent = stats.failed_attempts || 0
+  document.getElementById("securityAlerts").textContent = stats.security_alerts || 0
+}
+
+// Optional: Fetch recent activity logs if you want to show them
+async function fetchRecentActivity(token) {
+  try {
+    // You can add this endpoint to your backend if needed
+    const response = await fetch("/api/recent-activity", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      }
+    })
+
+    if (response.ok) {
+      const logs = await response.json()
+      updateActivityLogs(logs)
+    }
+  } catch (error) {
+    console.error("Error fetching recent activity:", error)
+  }
 }
 
 function updateActivityLogs(logs) {
   const logsContainer = document.getElementById("activityLogs")
 
-  if (logs.length === 0) {
-    logsContainer.innerHTML = "<p>No activity yet.</p>"
+  if (!logsContainer) {
+    // Activity logs container doesn't exist in the UI
+    return
+  }
+
+  if (!logs || logs.length === 0) {
+    logsContainer.innerHTML = "<p>No recent activity.</p>"
     return
   }
 
@@ -87,8 +106,8 @@ function updateActivityLogs(logs) {
 
       return `
         <div class="log-entry ${statusClass}${extraClass}">
-          [${timestamp}] ${log.username} - ${statusText} 
-          (IP: ${log.ip_address})${anomalyText}
+          [${timestamp}] ${log.username || 'Unknown'} - ${statusText} 
+          (IP: ${log.ip_address || 'Unknown'})${anomalyText}
         </div>
       `
     })
@@ -98,12 +117,74 @@ function updateActivityLogs(logs) {
   logsContainer.scrollTop = 0
 }
 
+function showError(message) {
+  // Create or update error message display
+  let errorDiv = document.getElementById("errorMessage")
+  
+  if (!errorDiv) {
+    errorDiv = document.createElement("div")
+    errorDiv.id = "errorMessage"
+    errorDiv.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #ff4444;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      z-index: 1000;
+      animation: fadeIn 0.3s ease-in;
+    `
+    document.body.appendChild(errorDiv)
+  }
+
+  errorDiv.textContent = message
+  errorDiv.style.display = "block"
+
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    if (errorDiv) {
+      errorDiv.style.display = "none"
+    }
+  }, 5000)
+}
+
 async function logout() {
   try {
-    await fetch("/api/auth/logout", { method: "POST" })
+    const token = localStorage.getItem('access_token')
+    
+    // Clear token from localStorage
+    localStorage.removeItem('access_token')
+    
+    // Optional: Call logout endpoint if you have one
+    if (token) {
+      await fetch("/api/auth/logout", { 
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      })
+    }
+    
     window.location.href = "/login.html"
   } catch (error) {
     console.error("Logout error:", error)
+    // Still redirect even if logout call fails
     window.location.href = "/login.html"
+  }
+}
+
+// Optional: Add a manual refresh button handler
+function manualRefresh() {
+  refreshDashboard()
+}
+
+// Optional: Add connection status indicator
+function updateConnectionStatus(isConnected) {
+  const statusIndicator = document.getElementById("connectionStatus")
+  if (statusIndicator) {
+    statusIndicator.textContent = isConnected ? "Connected" : "Disconnected"
+    statusIndicator.className = isConnected ? "status-connected" : "status-disconnected"
   }
 }

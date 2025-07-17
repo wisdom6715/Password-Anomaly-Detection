@@ -25,8 +25,6 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
 
-console.log(`Twilio configured: ${Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN)}`);
-
 const twilioClient = TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN 
   ? twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) 
   : null;
@@ -67,7 +65,6 @@ class User {
   async save() {
     try {
       if (this.id) {
-        // Update existing user
         const { data, error } = await supabase
           .from('users')
           .update({
@@ -84,7 +81,6 @@ class User {
 
         if (error) throw error;
       } else {
-        // Create new user
         const userData = {
           username: this.username,
           email: this.email,
@@ -95,14 +91,12 @@ class User {
           created_at: new Date().toISOString()
         };
 
-        console.log(`Creating user with data:`, userData);
         const { data, error } = await supabase
           .from('users')
           .insert(userData)
           .select();
 
         if (error) throw error;
-        console.log(`Insert result:`, data);
         
         if (data && data.length > 0) {
           this.id = data[0].id;
@@ -117,7 +111,6 @@ class User {
 
   static async getByUsername(username) {
     try {
-      console.log(`Querying user with username: ${username}`);
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -125,8 +118,6 @@ class User {
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
-      console.log(`Query result:`, data);
-      
       return data ? new User(data) : null;
     } catch (error) {
       console.error(`Error getting user by username:`, error);
@@ -176,13 +167,9 @@ class LoginAttempt {
     this.user_agent = data.user_agent;
     this.success = data.success;
     this.timestamp = data.timestamp || new Date();
-    this.location_country = data.location_country;
-    this.location_city = data.location_city;
     this.device_type = data.device_type;
     this.browser = data.browser;
     this.os = data.os;
-    this.hour_of_day = data.hour_of_day;
-    this.day_of_week = data.day_of_week;
 
     // Parse user agent if not already parsed
     if (this.user_agent && !this.device_type) {
@@ -195,11 +182,6 @@ class LoginAttempt {
     this.device_type = agent.device.family;
     this.browser = agent.family;
     this.os = agent.os.family;
-
-    // Set time-based attributes
-    const timestamp = new Date(this.timestamp);
-    this.hour_of_day = timestamp.getHours();
-    this.day_of_week = timestamp.getDay();
   }
 
   async save() {
@@ -217,13 +199,9 @@ class LoginAttempt {
           user_agent: this.user_agent,
           success: this.success,
           timestamp: timestampStr,
-          location_country: this.location_country,
-          location_city: this.location_city,
           device_type: this.device_type,
           browser: this.browser,
-          os: this.os,
-          hour_of_day: this.hour_of_day,
-          day_of_week: this.day_of_week
+          os: this.os
         })
         .select();
 
@@ -238,25 +216,31 @@ class LoginAttempt {
     }
   }
 
-  static async getByUserId(userId, limit = null) {
+  static async getStatsByUserId(userId) {
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('login_attempts')
-        .select('*')
-        .eq('user_id', userId)
-        .order('timestamp', { ascending: false });
+        .select('success')
+        .eq('user_id', userId);
 
-      if (limit) {
-        query = query.limit(limit);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
 
-      return data.map(attempt => new LoginAttempt(attempt));
+      const totalAttempts = data.length;
+      const successfulLogins = data.filter(attempt => attempt.success).length;
+      const failedAttempts = totalAttempts - successfulLogins;
+
+      return {
+        totalAttempts,
+        successfulLogins,
+        failedAttempts
+      };
     } catch (error) {
-      console.error(`Error getting login attempts:`, error);
-      return [];
+      console.error(`Error getting login stats:`, error);
+      return {
+        totalAttempts: 0,
+        successfulLogins: 0,
+        failedAttempts: 0
+      };
     }
   }
 }
@@ -305,132 +289,43 @@ class ThreatAlert {
     }
   }
 
-  async updateSmsSent(smsSent) {
-    try {
-      this.sms_sent = smsSent;
-      if (this.id) {
-        const { error } = await supabase
-          .from('threat_alerts')
-          .update({ sms_sent: smsSent })
-          .eq('id', this.id);
-
-        if (error) throw error;
-      }
-    } catch (error) {
-      console.error(`Error updating SMS sent status:`, error);
-    }
-  }
-
-  static async getByUserId(userId, limit = 50) {
+  static async getCountByUserId(userId) {
     try {
       const { data, error } = await supabase
         .from('threat_alerts')
-        .select('*')
-        .eq('user_id', userId)
-        .order('timestamp', { ascending: false })
-        .limit(limit);
+        .select('id', { count: 'exact' })
+        .eq('user_id', userId);
 
       if (error) throw error;
-      return data.map(alert => new ThreatAlert(alert));
+      return data.length;
     } catch (error) {
-      console.error(`Error getting threat alerts:`, error);
-      return [];
+      console.error(`Error getting threat alerts count:`, error);
+      return 0;
     }
   }
 }
 
-// Anomaly Detection Class
-class AnomalyDetector {
-  constructor() {
-    this.model = null;
-    this.scaler = null;
-    this.isTrained = false;
-    this.contamination = 0.1;
-  }
+// Simple anomaly detection - detects if login from new IP
+async function detectSimpleAnomaly(userId, ipAddress) {
+  try {
+    const { data, error } = await supabase
+      .from('login_attempts')
+      .select('ip_address')
+      .eq('user_id', userId)
+      .eq('success', true)
+      .limit(10);
 
-  extractFeatures(loginAttempts) {
-    return loginAttempts.map(attempt => [
-      attempt.hour_of_day,
-      attempt.day_of_week,
-      attempt.ip_address.length,
-      this.hashString(attempt.ip_address) % 1000,
-      this.hashString(attempt.user_agent) % 1000,
-      attempt.success ? 1 : 0,
-      this.hashString(attempt.device_type || '') % 100,
-      this.hashString(attempt.browser || '') % 100,
-      this.hashString(attempt.os || '') % 100
-    ]);
-  }
+    if (error) throw error;
 
-  hashString(str) {
-    return crypto.createHash('md5').update(str).digest('hex')
-      .split('')
-      .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  }
+    const knownIps = data.map(attempt => attempt.ip_address);
+    const isNewIp = !knownIps.includes(ipAddress);
 
-  async train(userId) {
-    try {
-      const attempts = await LoginAttempt.getByUserId(userId);
-      
-      if (attempts.length < 10) {
-        return false;
-      }
-
-      const features = this.extractFeatures(attempts);
-      
-      // Simple anomaly detection using statistical methods
-      this.model = this.calculateBaseline(features);
-      this.isTrained = true;
-      return true;
-    } catch (error) {
-      console.error(`Error training model:`, error);
-      return false;
-    }
-  }
-
-  calculateBaseline(features) {
-    const means = [];
-    const stds = [];
-    
-    for (let i = 0; i < features[0].length; i++) {
-      const column = features.map(row => row[i]);
-      const mean = column.reduce((sum, val) => sum + val, 0) / column.length;
-      const variance = column.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / column.length;
-      const std = Math.sqrt(variance);
-      
-      means.push(mean);
-      stds.push(std || 1); // Prevent division by zero
-    }
-    
-    return { means, stds };
-  }
-
-  detectAnomaly(loginAttempt) {
-    if (!this.isTrained) {
-      return { isAnomaly: false, score: 0.0 };
-    }
-
-    const features = this.extractFeatures([loginAttempt])[0];
-    let anomalyScore = 0;
-    
-    // Calculate z-score for each feature
-    for (let i = 0; i < features.length; i++) {
-      const zScore = Math.abs((features[i] - this.model.means[i]) / this.model.stds[i]);
-      anomalyScore += zScore;
-    }
-    
-    // Normalize score
-    anomalyScore = anomalyScore / features.length;
-    
-    // Consider anomalous if average z-score > 2
-    const isAnomaly = anomalyScore > 2;
-    
-    return { isAnomaly, score: anomalyScore };
+    return isNewIp;
+  } catch (error) {
+    console.error('Error detecting anomaly:', error);
+    return false;
   }
 }
-
-// Global anomaly detector instance
-const anomalyDetector = new AnomalyDetector();
 
 // Helper Functions
 async function sendSmsAlert(phoneNumber, message) {
@@ -477,55 +372,6 @@ async function logLoginAttempt(userId, username, success, req) {
 
   await attempt.save();
   return attempt;
-}
-
-async function checkForAnomalies(userId, loginAttempt) {
-  console.log(`🔍 Checking for anomalies for user ${userId}`);
-
-  // Train model if not already trained
-  if (!anomalyDetector.isTrained) {
-    console.log("🤖 Training anomaly detection model...");
-    const trainingSuccess = await anomalyDetector.train(userId);
-    if (trainingSuccess) {
-      console.log("✅ Model trained successfully");
-    } else {
-      console.log("⚠️  Insufficient data for training (need at least 10 login attempts)");
-      return false;
-    }
-  }
-
-  // Detect anomaly
-  const { isAnomaly, score } = anomalyDetector.detectAnomaly(loginAttempt);
-  console.log(`🎯 Anomaly detection result: ${isAnomaly}, Score: ${score.toFixed(2)}`);
-
-  if (isAnomaly) {
-    console.log("🚨 ANOMALY DETECTED! Sending alert...");
-    const user = await User.getById(userId);
-    if (user) {
-      // Create threat alert
-      const alert = new ThreatAlert({
-        user_id: userId,
-        alert_type: 'login_anomaly',
-        severity: 'medium',
-        description: `Anomalous login detected from IP: ${loginAttempt.ip_address}. Anomaly score: ${score.toFixed(2)}`,
-        ip_address: loginAttempt.ip_address,
-        user_agent: loginAttempt.user_agent
-      });
-      await alert.save();
-
-      // Send SMS alert
-      const message = `🚨 Security Alert: Unusual login activity detected on your account from ${loginAttempt.ip_address}. If this wasn't you, please secure your account immediately.`;
-      const smsSent = await sendSmsAlert(user.phone_number, message);
-      await alert.updateSmsSent(smsSent);
-
-      console.log(`📧 Alert created and SMS sent: ${smsSent}`);
-      return true;
-    }
-  } else {
-    console.log("✅ Login appears normal");
-  }
-
-  return false;
 }
 
 // JWT Middleware
@@ -597,13 +443,10 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    console.log(`Login attempt for username: ${username}`);
     const user = await User.getByUsername(username);
 
     if (user) {
-      console.log(`User found: ${user.username}`);
       const passwordValid = await user.checkPassword(password);
-      console.log(`Password check result: ${passwordValid}`);
 
       if (passwordValid) {
         // Successful login
@@ -614,8 +457,25 @@ app.post('/api/login', async (req, res) => {
         // Log successful login attempt
         const loginAttempt = await logLoginAttempt(user.id, user.username, true, req);
 
-        // Check for anomalies
-        const anomalyDetected = await checkForAnomalies(user.id, loginAttempt);
+        // Simple anomaly detection - check if login from new IP
+        const isAnomalous = await detectSimpleAnomaly(user.id, loginAttempt.ip_address);
+        
+        if (isAnomalous) {
+          // Create threat alert
+          const alert = new ThreatAlert({
+            user_id: user.id,
+            alert_type: 'new_ip_login',
+            severity: 'medium',
+            description: `Login from new IP address: ${loginAttempt.ip_address}`,
+            ip_address: loginAttempt.ip_address,
+            user_agent: loginAttempt.user_agent
+          });
+          await alert.save();
+
+          // Send SMS alert
+          const message = `🚨 Security Alert: Login from new IP address ${loginAttempt.ip_address}. If this wasn't you, please secure your account.`;
+          const smsSent = await sendSmsAlert(user.phone_number, message);
+        }
 
         // Generate JWT token
         const accessToken = jwt.sign({ userId: user.id }, JWT_SECRET_KEY, { expiresIn: '24h' });
@@ -626,14 +486,12 @@ app.post('/api/login', async (req, res) => {
           user: user.toDict()
         };
 
-        if (anomalyDetected) {
-          response.security_alert = 'Unusual activity detected. SMS alert sent.';
+        if (isAnomalous) {
+          response.security_alert = 'New IP detected. SMS alert sent.';
         }
 
         return res.json(response);
       }
-    } else {
-      console.log("User not found");
     }
 
     // Failed login
@@ -652,107 +510,51 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-app.get('/api/profile', authenticateToken, async (req, res) => {
+// NEW STATISTICS ENDPOINTS
+app.get('/api/stats/login-attempts', authenticateToken, async (req, res) => {
   try {
-    const user = await User.getById(req.user.userId);
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.json(user.toDict());
-  } catch (error) {
-    console.error('Profile error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/security/alerts', authenticateToken, async (req, res) => {
-  try {
-    const alerts = await ThreatAlert.getByUserId(req.user.userId, 50);
-
-    const alertsData = alerts.map(alert => {
-      let timestamp = alert.timestamp;
-      if (typeof timestamp === 'string') {
-        timestamp = new Date(timestamp.replace('Z', '+00:00')).toISOString();
-      } else if (timestamp instanceof Date) {
-        timestamp = timestamp.toISOString();
-      }
-
-      return {
-        id: alert.id,
-        alert_type: alert.alert_type,
-        severity: alert.severity,
-        description: alert.description,
-        timestamp: timestamp,
-        sms_sent: alert.sms_sent,
-        ip_address: alert.ip_address
-      };
+    const stats = await LoginAttempt.getStatsByUserId(req.user.userId);
+    res.json({
+      total_login_attempts: stats.totalAttempts,
+      successful_logins: stats.successfulLogins,
+      failed_attempts: stats.failedAttempts
     });
-
-    res.json(alertsData);
   } catch (error) {
-    console.error('Security alerts error:', error);
+    console.error('Login stats error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/security/login-history', authenticateToken, async (req, res) => {
+app.get('/api/stats/security-alerts', authenticateToken, async (req, res) => {
   try {
-    const attempts = await LoginAttempt.getByUserId(req.user.userId, 100);
-
-    const history = attempts.map(attempt => {
-      let timestamp = attempt.timestamp;
-      if (typeof timestamp === 'string') {
-        timestamp = new Date(timestamp.replace('Z', '+00:00')).toISOString();
-      } else if (timestamp instanceof Date) {
-        timestamp = timestamp.toISOString();
-      }
-
-      return {
-        ip_address: attempt.ip_address,
-        success: attempt.success,
-        timestamp: timestamp,
-        device_type: attempt.device_type,
-        browser: attempt.browser,
-        os: attempt.os,
-        location_country: attempt.location_country,
-        location_city: attempt.location_city
-      };
+    const alertsCount = await ThreatAlert.getCountByUserId(req.user.userId);
+    res.json({
+      security_alerts: alertsCount
     });
-
-    res.json(history);
   } catch (error) {
-    console.error('Login history error:', error);
+    console.error('Security alerts stats error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/security/retrain-model', authenticateToken, async (req, res) => {
+app.get('/api/stats/dashboard', authenticateToken, async (req, res) => {
   try {
-    const success = await anomalyDetector.train(req.user.userId);
-
-    if (success) {
-      res.json({ message: 'Model retrained successfully' });
-    } else {
-      res.status(400).json({ error: 'Insufficient data for training' });
-    }
+    const loginStats = await LoginAttempt.getStatsByUserId(req.user.userId);
+    const alertsCount = await ThreatAlert.getCountByUserId(req.user.userId);
+    
+    res.json({
+      total_login_attempts: loginStats.totalAttempts,
+      successful_logins: loginStats.successfulLogins,
+      failed_attempts: loginStats.failedAttempts,
+      security_alerts: alertsCount
+    });
   } catch (error) {
-    console.error('Retrain model error:', error);
+    console.error('Dashboard stats error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
-    twilio_configured: Boolean(twilioClient),
-    supabase_configured: Boolean(supabase)
-  });
-});
-
+// SMS Test endpoint
 app.post('/api/test-sms', authenticateToken, async (req, res) => {
   try {
     const user = await User.getById(req.user.userId);
@@ -761,7 +563,7 @@ app.post('/api/test-sms', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const testMessage = "🧪 Test SMS from your security system. This is just for testing your project please kindly ignore from wisdom.A";
+    const testMessage = "🧪 Test SMS from your security system.";
     const success = await sendSmsAlert(user.phone_number, testMessage);
 
     res.json({
@@ -773,6 +575,16 @@ app.post('/api/test-sms', authenticateToken, async (req, res) => {
     console.error('Test SMS error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    twilio_configured: Boolean(twilioClient),
+    supabase_configured: Boolean(supabase)
+  });
 });
 
 // Error handlers
